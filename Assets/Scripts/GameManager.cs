@@ -4,8 +4,9 @@ using UnityEngine;
 using System;
 using System.Linq;
 using UnityEngine.UI;
+using Unity.Netcode;
 
-public class GameManager : MonoBehaviour
+public class GameManager : NetworkBehaviour
 {
     public static GameManager Instance { get; private set; }
     public Board board;
@@ -149,5 +150,10 @@ public class GameManager : MonoBehaviour
     public LocalPlayer GetPlayerByPlayerStatus(PlayerStatus playerStatus)
     {
         return players[playerStatus];
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        Debug.Log("OnNetworkSpawn: " + NetworkManager.Singleton.LocalClientId);
     }
 }

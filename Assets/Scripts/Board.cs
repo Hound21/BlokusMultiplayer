@@ -188,17 +188,17 @@ public class Board : MonoBehaviour
     }
 
 
-    public void SetTilesOccupied(List<Tile> tiles, PlayerStatus playerStatus)
+    public void SetTilesOccupied(List<Vector2Int> tilePositions, PlayerStatus playerStatus)
     {
-        foreach (var tile in tiles)
+        foreach (var tilePos in tilePositions)
         {
-            SetTileOccupied(tile, playerStatus);
+            SetTileOccupied(tilePos, playerStatus);
         }
     }
 
-    public void SetTileOccupied(Tile tile, PlayerStatus playerStatus)
+    public void SetTileOccupied(Vector2Int tilePos, PlayerStatus playerStatus)
     {
-        boardOccupied[(int)tile.transform.position.x, (int)tile.transform.position.y] = playerStatus;
+        boardOccupied[tilePos.x, tilePos.y] = playerStatus;
     }
 
     public PlayerStatus IsTileOccupied(Vector2Int pos) //OVERLOADED

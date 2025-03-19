@@ -1,8 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Netcode;
 
-public class Piece : MonoBehaviour
+public class Piece : NetworkBehaviour
 {
     public PlayerStatus playerStatus;
     public List<Vector2Int> shape = new List<Vector2Int>();
@@ -108,11 +109,15 @@ public class Piece : MonoBehaviour
             return;
         }
         
-        if (!PlacePiece(targetTiles)) // Hier wird später eine Anfrage zum placen an den Server geschickt (CmdRequestPlacePiece(...))
+        /*
+        if (!PlacePieceRpc(GetTilePositions(targetTiles))) // Hier wird später eine Anfrage zum placen an den Server geschickt (CmdRequestPlacePiece(...))
         {
             // Should not happen
             DragResetPiecePosition();
         }
+        */
+        PlacePieceRpc(new Vector2IntList { Values = GetTilePositions(targetTiles) });
+        DeactivateTileMarkers();
     }
 
     private void MovePiece(Vector3 newPosition)
@@ -148,26 +153,34 @@ public class Piece : MonoBehaviour
     // END DRAGGING
 
 
-
-
-
-
-
-    public bool PlacePiece(List<Tile> targetTiles)  //Wird im Multiplayer später zu CmdRequestPlacePiece(...)
+    public List<Vector2Int> GetTilePositions(List<Tile> tiles)
     {
-        if (targetTiles == null || targetTiles.Count < shape.Count)
+        List<Vector2Int> tilePositions = new List<Vector2Int>();
+        foreach (Tile tile in tiles)
+        {
+            tilePositions.Add(new Vector2Int(Mathf.RoundToInt(tile.transform.position.x), Mathf.RoundToInt(tile.transform.position.y)));
+        }
+        return tilePositions;
+    }
+
+
+    [Rpc(SendTo.Server)]
+    public void PlacePieceRpc(Vector2IntList targetTilePositions)  //Wird im Multiplayer später zu CmdRequestPlacePiece(...)
+    {
+        /*
+        if (targetTilePositions == null || targetTilePositions.Count < shape.Count)
         {
             return false;
-        }
+        } 
+        */
 
-        transform.position = new Vector3(targetTiles[0].transform.position.x, targetTiles[0].transform.position.y, -2);
-        board.SetTilesOccupied(targetTiles, playerStatus);
+        transform.position = new Vector3(targetTilePositions.Values[0].x, targetTilePositions.Values[0].y, -2);
+        board.SetTilesOccupied(targetTilePositions.Values, playerStatus);
         GameManager.Instance.GetPlayerByPlayerStatus(playerStatus).firstPiecePlaced = true;
         isPlaced = true;
-        DeactivateTileMarkers();
 
         GameManager.Instance.EndTurn(this);
-        return true;
+        //return true;
     }
 
     public List<Tile> GetTargetTilesForPiece(Tile nearestTile)
