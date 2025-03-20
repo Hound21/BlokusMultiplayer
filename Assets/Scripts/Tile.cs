@@ -7,6 +7,7 @@ public class Tile : MonoBehaviour
     [SerializeField] private Color _baseColor, _offsetColor;
     [SerializeField] private SpriteRenderer _renderer;
     [SerializeField] private GameObject _highlight;
+    public Vector2Int gridPosition;
     // Start is called before the first frame update
     public void Init(bool isOffset)
     {

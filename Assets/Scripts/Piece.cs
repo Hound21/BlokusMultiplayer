@@ -8,7 +8,7 @@ public class Piece : NetworkBehaviour
     public PlayerStatus playerStatus;
     public List<Vector2Int> shape = new List<Vector2Int>();
 
-    public bool isPlaced;
+    private NetworkVariable<bool> isPlaced = new NetworkVariable<bool>(false);
     public int points;
     public bool _isDragging;
     private Board board;
@@ -23,7 +23,6 @@ public class Piece : NetworkBehaviour
 
     void Start()
     {
-        isPlaced = false;
         _isDragging = false;
         SetColor(GameManager.Instance.GetPlayerByPlayerStatus(playerStatus).color);
         board = GameManager.Instance.board;
@@ -55,13 +54,13 @@ public class Piece : NetworkBehaviour
 
         MovePiece(newPosition);
 
-        Tile nearestTile = board.GetClosestTile(transform.position);
-        if (nearestTile != null)
+        Vector2Int closestTileGridPos = board.GetClosestTileGridPosition(transform.position);
+        if (closestTileGridPos != new Vector2Int(-1, -1))
         {
-            List<Tile> targetTiles = GetTargetTilesForPiece(nearestTile);
-            if (targetTiles != null && board.AreTilesValidForPlacement(targetTiles, playerStatus))
+            Vector2IntList targetTilesGridPositions = GetTargetTilesGridPositionsForPiece(closestTileGridPos);
+            if (board.AreTilesValidForPlacement(targetTilesGridPositions, playerStatus))
             {
-                ActivateTileMarkers(targetTiles);
+                ActivateTileMarkers(targetTilesGridPositions);
             }
             else
             {
@@ -86,7 +85,7 @@ public class Piece : NetworkBehaviour
 
     private void OnMouseDown()
     {
-        if (GameManager.Instance.GetCurrentPlayerStatus() == playerStatus && !isPlaced)
+        if (GameManager.Instance.GetCurrentPlayerStatus() == playerStatus && !isPlaced.Value)
         {
             BeginDragging();
         }
@@ -100,24 +99,21 @@ public class Piece : NetworkBehaviour
         }
         _isDragging = false;
         
-        Tile nearestTile = board.GetClosestTile(transform.position);
-        List<Tile> targetTiles = nearestTile != null ? GetTargetTilesForPiece(nearestTile) : null;
+        Vector2Int nearestTileGridPosition = board.GetClosestTileGridPosition(transform.position);
 
-        if (targetTiles == null || !board.AreTilesValidForPlacement(targetTiles, playerStatus)) // Hier wird später eine Anfrage zum prüfen an den Server geschickt (CmdRequestCheckValidPosition(...))
+        if (nearestTileGridPosition != new Vector2Int(-1, -1))
         {
-            DragResetPiecePosition();
-            return;
+            Vector2IntList targetTilesGridPositions = GetTargetTilesGridPositionsForPiece(nearestTileGridPosition);
+
+            if (board.AreTilesValidForPlacement(targetTilesGridPositions, playerStatus))
+            {
+                PlacePieceRpc(targetTilesGridPositions);
+                DeactivateTileMarkers();
+                return;
+            }
         }
-        
-        /*
-        if (!PlacePieceRpc(GetTilePositions(targetTiles))) // Hier wird später eine Anfrage zum placen an den Server geschickt (CmdRequestPlacePiece(...))
-        {
-            // Should not happen
-            DragResetPiecePosition();
-        }
-        */
-        PlacePieceRpc(new Vector2IntList { Values = GetTilePositions(targetTiles) });
-        DeactivateTileMarkers();
+
+        DragResetPiecePosition();
     }
 
     private void MovePiece(Vector3 newPosition)
@@ -153,6 +149,7 @@ public class Piece : NetworkBehaviour
     // END DRAGGING
 
 
+    /* Nicht mehr benötigt
     public List<Vector2Int> GetTilePositions(List<Tile> tiles)
     {
         List<Vector2Int> tilePositions = new List<Vector2Int>();
@@ -162,6 +159,7 @@ public class Piece : NetworkBehaviour
         }
         return tilePositions;
     }
+    */
 
 
     [Rpc(SendTo.Server)]
@@ -175,28 +173,24 @@ public class Piece : NetworkBehaviour
         */
 
         transform.position = new Vector3(targetTilePositions.Values[0].x, targetTilePositions.Values[0].y, -2);
-        board.SetTilesOccupied(targetTilePositions.Values, playerStatus);
+        board.SetTilesOccupied(targetTilePositions, playerStatus);
         GameManager.Instance.GetPlayerByPlayerStatus(playerStatus).firstPiecePlaced = true;
-        isPlaced = true;
+        isPlaced.Value = true;
 
         GameManager.Instance.EndTurn(this);
         //return true;
     }
 
-    public List<Tile> GetTargetTilesForPiece(Tile nearestTile)
+    // Die Vector2IntList kann außerhalb des Grids liegen
+    public Vector2IntList GetTargetTilesGridPositionsForPiece(Vector2Int nearestTileGridPosition)
     {
-        List<Tile> targetTiles = new List<Tile>();
+        Vector2IntList targetTilesGridPositions = new Vector2IntList { Values = new List<Vector2Int>() };
         foreach (var gridPos in shape)
         {
-            Vector2Int targetPos = new Vector2Int((int)nearestTile.transform.position.x, (int)nearestTile.transform.position.y) + gridPos;
-            Tile targetTile = board.GetTileAtPosition(targetPos);
-
-            if (targetTile == null)
-                return new List<Tile>(); // Return empty list if any tile is invalid
-            
-            targetTiles.Add(targetTile);
+            Vector2Int targetPos = nearestTileGridPosition + gridPos;    
+            targetTilesGridPositions.Values.Add(targetPos);
         }
-        return targetTiles;
+        return targetTilesGridPositions;
     }
 
     private void InstantiateTileMarkers()
@@ -209,13 +203,14 @@ public class Piece : NetworkBehaviour
         }
     }
 
-    private void ActivateTileMarkers(List<Tile> targetTiles)
+    private void ActivateTileMarkers(Vector2IntList targetTilesGridPositions)
     {
         for (int i = 0; i < tileMarkers.Count; i++)
         {
             var marker = tileMarkers[i];
             marker.SetActive(true);
-            marker.transform.position = targetTiles[i].transform.position + new Vector3(0, 0, -0.5f);
+            Vector3 targetPos = new Vector3(targetTilesGridPositions.Values[i].x, targetTilesGridPositions.Values[i].y, -0.5f);
+            marker.transform.position =targetPos;
         }
     }
 

@@ -18,6 +18,7 @@ public class NetworkManagerUI : MonoBehaviour
             NetworkManager.Singleton.StartClient();
             Hide();
         });
+        NetworkManager.Singleton.StartHost();
     }
 
     private void Hide() {

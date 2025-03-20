@@ -1,25 +1,33 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Netcode;
 
-public class Board : MonoBehaviour
+public class Board : NetworkBehaviour
 {
     public Tile tilePrefab;
-    public Tile[,] boardTiles = new Tile[20, 20];
-    public PlayerStatus[,] boardOccupied = new PlayerStatus[20, 20];
-    public int boardXSize;
-    public int boardYSize;
+    public Tile[,] boardTiles;
+    private NetworkList<int> boardOccupied;
+    public const int boardXSize = 20;
+    public const int boardYSize = 20;
 
+
+
+    private void Awake()
+    {
+        boardOccupied = new NetworkList<int>();
+        boardTiles = new Tile[boardXSize, boardYSize];
+    }
     void Start()
     {
         if (boardTiles[0, 0] == null)
         {
             InitializeBoard();
+            InitializeBoardOccupied();
         }
-        boardXSize = boardTiles.GetLength(0);
-        boardYSize = boardTiles.GetLength(1);
     }
 
+    /*
     public void PrintGrid()
     {
         for (int i = 0; i < 20; i++)
@@ -33,22 +41,59 @@ public class Board : MonoBehaviour
             Debug.Log(row);
         }
     }
+    */
 
     public void InitializeBoard()
     {
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < boardYSize; i++)
         {
-            for (int j = 0; j < 20; j++)
+            for (int j = 0; j < boardXSize; j++)
             {
                 Tile tile = Instantiate(tilePrefab, new Vector3(i, j, 0), Quaternion.identity);
                 bool isOffset = (i % 2 == 0 && j % 2 != 0) || (i % 2 != 0 && j % 2 == 0);
                 tile.Init(isOffset);
                 boardTiles[i, j] = tile;
-                boardOccupied[i, j] = PlayerStatus.None;
+                //boardOccupied[i, j] = PlayerStatus.None;
+                tile.gridPosition = new Vector2Int(i, j);
             }
         }
     }
 
+    public void InitializeBoardOccupied()
+    {
+        for (int i = 0; i < boardYSize; i++)
+        {
+            for (int j = 0; j < boardXSize; j++)
+            {
+                boardOccupied.Add((int)PlayerStatus.None);
+            }
+        }
+    }
+
+    public Vector2Int GetClosestTileGridPosition(Vector3 position)
+    {
+        float closestDistance = Mathf.Infinity;
+        Tile closestTile = null;
+
+        for (int x = 0; x < boardXSize; x++)
+        {
+            for (int y = 0; y < boardYSize; y++)
+            {
+                Tile tile = boardTiles[x, y];
+                if (tile == null) continue;
+
+                float distance = Vector3.Distance(tile.transform.position, position);
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closestTile = tile;
+                }
+            }
+        }
+        return closestDistance <= 2.25f ? closestTile.gridPosition : new Vector2Int(-1, -1);
+    }
+
+    /*
     public Tile GetClosestTile(Vector3 position)
     {
         float closestDistance = Mathf.Infinity;
@@ -71,19 +116,27 @@ public class Board : MonoBehaviour
         }
         return closestDistance <= 2.25f ? closestTile : null;
     }
+    */
 
 
-
-
-    public bool AreTilesValidForPlacement(List<Tile> tiles, PlayerStatus playerStatus)
+    public bool AreTilesValidForPlacement(Vector2IntList tileGridPositions, PlayerStatus playerStatus)
     {
-        if (tiles == null || tiles.Count == 0)
+        if (tileGridPositions.Values.Count == 0)
             return false;
 
-        // Check if any tile is already occupied
-        foreach (Tile tile in tiles)
+        // Check if all tiles are on the board
+        foreach (Vector2Int pos in tileGridPositions.Values)
         {
-            if (IsTileOccupied(new Vector2Int(Mathf.RoundToInt(tile.transform.position.x), Mathf.RoundToInt(tile.transform.position.y))) != PlayerStatus.None)
+            if (!IsPositionOnBoard(pos))
+            {
+                return false;
+            }
+        }
+
+        // Check if any tile is already occupied
+        foreach (Vector2Int pos in tileGridPositions.Values)
+        {
+            if (GetGridPositionOccupant(pos) != PlayerStatus.None)
             {
                 //Debug.Log("Tile is already occupied");
                 return false;
@@ -95,25 +148,27 @@ public class Board : MonoBehaviour
         // Check starting corner for first piece
         if (!player.firstPiecePlaced)
         {
-            Tile startTile = GetStartingTileForPlayer(playerStatus);
-            foreach (Tile tile in tiles)
+            Vector2Int startGridPos = GetStartingGridPositionForPlayer(playerStatus);
+            foreach (Vector2Int gridPos in tileGridPositions.Values)
             {
-                if (tile == startTile)
+                if (gridPos == startGridPos)
+                {
                     return true;
+                }
+                return false;
             }
-            return false;
         }
 
         // Check adjacent rules
         bool hasCornerAdjacent = false;
-        foreach (Tile tile in tiles)
+        foreach (Vector2Int gridPos in tileGridPositions.Values)
         {
-            if (CheckIfFriendlyPieceAtCorner(tile, playerStatus))
+            if (CheckIfFriendlyPieceAtCorner(gridPos, playerStatus))
             {
                 hasCornerAdjacent = true;
             }
 
-            if (CheckIfFriendlyPieceAtSide(tile, playerStatus))
+            if (CheckIfFriendlyPieceAtSide(gridPos, playerStatus))
             {
                 //Debug.Log("Tile has friendly piece at side");
                 return false;
@@ -123,7 +178,7 @@ public class Board : MonoBehaviour
         return hasCornerAdjacent;
     }
 
-    private Tile GetStartingTileForPlayer(PlayerStatus playerStatus)
+    private Vector2Int GetStartingGridPositionForPlayer(PlayerStatus playerStatus)
     {
         Vector2Int startPos;
 
@@ -142,30 +197,30 @@ public class Board : MonoBehaviour
                 startPos = new Vector2Int(boardXSize - 1, boardYSize - 1); // Rechts oben
                 break;
             default:
-                return null;
+                return new Vector2Int(-1, -1);
         }
 
-        return GetTileAtPosition(startPos);
+        return startPos;
     }
 
-    private bool CheckIfFriendlyPieceAtCorner(Tile tile, PlayerStatus playerStatus)
+    private bool CheckIfFriendlyPieceAtCorner(Vector2Int gridPos, PlayerStatus playerStatus)
     {
         Vector2Int[] cornerOffsets = {
             new Vector2Int(-1, -1), new Vector2Int(1, 1),
             new Vector2Int(-1, 1), new Vector2Int(1, -1)
         };
 
-        return CheckIfFriendlyPiece(new Vector2Int(Mathf.RoundToInt(tile.transform.position.x), Mathf.RoundToInt(tile.transform.position.y)), playerStatus, cornerOffsets);
+        return CheckIfFriendlyPiece(gridPos, playerStatus, cornerOffsets);
     }
 
-    private bool CheckIfFriendlyPieceAtSide(Tile tile, PlayerStatus playerStatus)
+    private bool CheckIfFriendlyPieceAtSide(Vector2Int gridPos, PlayerStatus playerStatus)
     {
         Vector2Int[] sideOffsets = {
             new Vector2Int(-1, 0), new Vector2Int(1, 0),
             new Vector2Int(0, -1), new Vector2Int(0, 1)
         };
 
-        return CheckIfFriendlyPiece(new Vector2Int(Mathf.RoundToInt(tile.transform.position.x), Mathf.RoundToInt(tile.transform.position.y)), playerStatus, sideOffsets);
+        return CheckIfFriendlyPiece(gridPos, playerStatus, sideOffsets);
     }
 
     private bool CheckIfFriendlyPiece(Vector2Int position, PlayerStatus playerStatus, Vector2Int[] offsets)
@@ -173,11 +228,11 @@ public class Board : MonoBehaviour
         foreach (var offset in offsets)
         {
             Vector2Int targetPos = position + offset;
-            if (targetPos.x < 0 || targetPos.x >= boardXSize || targetPos.y < 0 || targetPos.y >= boardYSize)
+            if (!IsPositionOnBoard(targetPos))
             {
                 continue;
             }    
-            PlayerStatus occupyingPlayer = IsTileOccupied(targetPos);
+            PlayerStatus occupyingPlayer = GetGridPositionOccupant(targetPos);
 
             if (occupyingPlayer == playerStatus)
             {
@@ -188,29 +243,42 @@ public class Board : MonoBehaviour
     }
 
 
-    public void SetTilesOccupied(List<Vector2Int> tilePositions, PlayerStatus playerStatus)
+    public void SetTilesOccupied(Vector2IntList tileGridPositions, PlayerStatus playerStatus)
     {
-        foreach (var tilePos in tilePositions)
-        {
-            SetTileOccupied(tilePos, playerStatus);
-        }
+            foreach (var tileGridPos in tileGridPositions.Values)
+            {
+                SetTileOccupied(tileGridPos, playerStatus);
+            }
     }
 
-    public void SetTileOccupied(Vector2Int tilePos, PlayerStatus playerStatus)
+    private void SetTileOccupied(Vector2Int tilePos, PlayerStatus playerStatus)
     {
-        boardOccupied[tilePos.x, tilePos.y] = playerStatus;
+        boardOccupied[tilePos.x + tilePos.y * boardXSize] = (int)playerStatus;
     }
 
-    public PlayerStatus IsTileOccupied(Vector2Int pos) //OVERLOADED
+    private PlayerStatus GetGridPositionOccupant(Vector2Int pos) //OVERLOADED
     {
-        return boardOccupied[pos.x, pos.y];
+        return (PlayerStatus)boardOccupied[pos.x + pos.y * boardXSize];
     }
 
-    public PlayerStatus IsTileOccupied(Tile tile) //OVERLOADED
+    /* nichtmehr benutzt
+    public PlayerStatus GetGridPositionOccupant(Tile tile) //OVERLOADED
     {
         return boardOccupied[(int)tile.transform.position.x, (int)tile.transform.position.y];
     }
+    */
 
+    private bool IsPositionOnBoard(Vector2Int pos)
+    {
+        if (pos.x < 0 || pos.x >= boardXSize || pos.y < 0 || pos.y >= boardYSize)
+        {
+            return false;
+        }
+        return true;
+    }
+
+
+    /* nichtmehr benutzt
     public Tile GetTileAtPosition(Vector2Int pos)
     {
         int x = pos.x;
@@ -222,6 +290,15 @@ public class Board : MonoBehaviour
         }
         return boardTiles[x, y];
     }
+    */
+
+    /*
+   private void OnDestroy() 
+    {
+        boardOccupied.Clear();
+        boardOccupied = null;        
+    }
+    */
 }
 
 
