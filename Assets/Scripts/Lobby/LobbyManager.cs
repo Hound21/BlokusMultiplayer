@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unity.Netcode;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Lobbies;
@@ -17,6 +18,7 @@ public class LobbyManager : MonoBehaviour {
 
     public const string KEY_PLAYER_NAME = "PlayerName";
     public const string KEY_PLAYER_STATUS = "PlayerStatus";
+    public const string KEY_PLAYER_NETWORK_ID = "PlayerNetworkId";
     public const string KEY_GAME_MODE = "GameMode";
     public const string KEY_START_GAME = "StartGame";
     public const string KEY_RELAY_JOIN_CODE = "RelayJoinCode";
@@ -59,6 +61,7 @@ public class LobbyManager : MonoBehaviour {
 
     private void Awake() {
         Instance = this;
+        DontDestroyOnLoad(gameObject);
     }
 
     private void Update() {
@@ -164,6 +167,16 @@ public class LobbyManager : MonoBehaviour {
             { KEY_PLAYER_NAME, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, playerName) },
             { KEY_PLAYER_STATUS, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, PlayerStatus.PlayerRed.ToString()) }
         });
+    }
+
+    public Player GetCurrentPlayer() {
+        foreach (Player player in joinedLobby.Players) {
+            if (player.Id == AuthenticationService.Instance.PlayerId) {
+                // This player out player
+                return player;
+            }
+        }
+        return null;
     }
 
     public void ChangeGameMode() {
@@ -416,5 +429,23 @@ public class LobbyManager : MonoBehaviour {
         } catch (LobbyServiceException e) {
             Debug.Log(e);
         }
+    }
+
+    public async void UpdatePlayerNetworkId() {
+        try {
+            var test = Instance.GetCurrentPlayer();
+            var updatedPlayerData = test.Data;
+            updatedPlayerData.Add(KEY_PLAYER_NETWORK_ID, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, NetworkManager.Singleton.LocalClientId.ToString()));
+            var updatePlayerOptions = new UpdatePlayerOptions {
+                Data = updatedPlayerData
+            };
+            await LobbyService.Instance.UpdatePlayerAsync(Instance.GetJoinedLobby().Id, Instance.GetCurrentPlayer().Id, updatePlayerOptions);
+
+        }
+        catch (Exception e) {
+            Console.WriteLine(e);
+            throw;
+        }
+
     }
 }

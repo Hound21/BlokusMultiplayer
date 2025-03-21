@@ -32,6 +32,10 @@ public class GameManager : NetworkBehaviour
 
         players = new Dictionary<PlayerStatus, LocalPlayer>();
 
+        LobbyManager.Instance.UpdatePlayerNetworkId();
+
+        //var test = LobbyManager.Instance.GetCurrentPlayer();
+        
         players[PlayerStatus.PlayerRed] = new LocalPlayer(PlayerStatus.PlayerRed, Color.red);
         players[PlayerStatus.PlayerGreen] = new LocalPlayer(PlayerStatus.PlayerGreen, Color.green);
         players[PlayerStatus.PlayerBlue] = new LocalPlayer(PlayerStatus.PlayerBlue, Color.blue);

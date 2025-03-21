@@ -33,7 +33,7 @@ public class StartGameManager : MonoBehaviour {
 
         NetworkManager.Singleton.StartHost();
 
-        playerData.playerStati.Add(NetworkManager.Singleton.LocalClientId.ToString(), );
+        //playerData.playerStati.Add(NetworkManager.Singleton.LocalClientId.ToString(), );
     }
 
     public void StartClient() {
