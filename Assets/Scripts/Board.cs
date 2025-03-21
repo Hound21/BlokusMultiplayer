@@ -11,21 +11,19 @@ public class Board : NetworkBehaviour
     public const int boardXSize = 20;
     public const int boardYSize = 20;
 
+    //public event EventHandler OnBoardOccupiedChanged;
 
-
-    private void Awake()
+    void Start()
     {
         boardOccupied = new NetworkList<int>();
         boardTiles = new Tile[boardXSize, boardYSize];
-    }
-    void Start()
-    {
         if (boardTiles[0, 0] == null)
         {
             InitializeBoard();
             InitializeBoardOccupied();
         }
     }
+
 
     /*
     public void PrintGrid()

@@ -17,8 +17,8 @@ public class NetworkManagerUI : MonoBehaviour
         startClientButton.onClick.AddListener(() => {
             NetworkManager.Singleton.StartClient();
             Hide();
+            LobbyManager.Instance.StartGame();
         });
-        NetworkManager.Singleton.StartHost();
     }
 
     private void Hide() {

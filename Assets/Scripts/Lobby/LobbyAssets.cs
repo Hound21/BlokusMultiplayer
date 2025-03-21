@@ -20,13 +20,13 @@ public class LobbyAssets : MonoBehaviour {
         Instance = this;
     }
 
-    public Sprite GetSprite(LobbyManager.PlayerCharacter playerCharacter) {
-        switch (playerCharacter) {
+    public Sprite GetSprite(PlayerStatus playerStatus) {
+        switch (playerStatus) {
             default:
-            case LobbyManager.PlayerCharacter.RedCharacter:   return redCharacterSprite;
-            case LobbyManager.PlayerCharacter.GreenCharacter:    return greenCharacterSprite;
-            case LobbyManager.PlayerCharacter.BlueCharacter:   return blueCharacterSprite;
-            case LobbyManager.PlayerCharacter.YellowCharacter: return yellowCharacterSprite;
+            case PlayerStatus.PlayerRed:   return redCharacterSprite;
+            case PlayerStatus.PlayerGreen:    return greenCharacterSprite;
+            case PlayerStatus.PlayerBlue:   return blueCharacterSprite;
+            case PlayerStatus.PlayerYellow: return yellowCharacterSprite;
         }
     }
 

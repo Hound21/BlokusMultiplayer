@@ -32,16 +32,16 @@ public class LobbyUI : MonoBehaviour {
         playerSingleTemplate.gameObject.SetActive(false);
 
         changeRedCharacterButton.onClick.AddListener(() => {
-            LobbyManager.Instance.UpdatePlayerCharacter(LobbyManager.PlayerCharacter.RedCharacter);
+            LobbyManager.Instance.UpdatePlayerStatus(PlayerStatus.PlayerRed);
         });
         changeGreenCharacterButton.onClick.AddListener(() => {
-            LobbyManager.Instance.UpdatePlayerCharacter(LobbyManager.PlayerCharacter.GreenCharacter);
+            LobbyManager.Instance.UpdatePlayerStatus(PlayerStatus.PlayerGreen);
         });
         changeBlueCharacterButton.onClick.AddListener(() => {
-            LobbyManager.Instance.UpdatePlayerCharacter(LobbyManager.PlayerCharacter.BlueCharacter);
+            LobbyManager.Instance.UpdatePlayerStatus(PlayerStatus.PlayerBlue);
         });
         changeYellowCharacterButton.onClick.AddListener(() => {
-            LobbyManager.Instance.UpdatePlayerCharacter(LobbyManager.PlayerCharacter.YellowCharacter);
+            LobbyManager.Instance.UpdatePlayerStatus(PlayerStatus.PlayerYellow);
         });
 
         leaveLobbyButton.onClick.AddListener(() => {

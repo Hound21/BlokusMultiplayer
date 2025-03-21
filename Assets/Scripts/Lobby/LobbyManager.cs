@@ -1,21 +1,25 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Lobbies;
 using Unity.Services.Lobbies.Models;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class LobbyManager : MonoBehaviour {
 
 
     public static LobbyManager Instance { get; private set; }
 
+    public static bool IsHost { get; private set; }
+    public static string RelayJoinCode { get; private set; }
 
     public const string KEY_PLAYER_NAME = "PlayerName";
-    public const string KEY_PLAYER_CHARACTER = "Character";
+    public const string KEY_PLAYER_STATUS = "PlayerStatus";
     public const string KEY_GAME_MODE = "GameMode";
+    public const string KEY_START_GAME = "StartGame";
+    public const string KEY_RELAY_JOIN_CODE = "RelayJoinCode";
 
 
 
@@ -25,6 +29,7 @@ public class LobbyManager : MonoBehaviour {
     public event EventHandler<LobbyEventArgs> OnJoinedLobbyUpdate;
     public event EventHandler<LobbyEventArgs> OnKickedFromLobby;
     public event EventHandler<LobbyEventArgs> OnLobbyGameModeChanged;
+    public event EventHandler<LobbyEventArgs> OnLobbyStartGame;
     public class LobbyEventArgs : EventArgs {
         public Lobby lobby;
     }
@@ -40,13 +45,6 @@ public class LobbyManager : MonoBehaviour {
         FourPlayerMode
     }
 
-    public enum PlayerCharacter {
-        RedCharacter,
-        GreenCharacter,
-        BlueCharacter,
-        YellowCharacter
-    }
-
 
 
     private float heartbeatTimer;
@@ -54,6 +52,9 @@ public class LobbyManager : MonoBehaviour {
     private float refreshLobbyListTimer = 5f;
     private Lobby joinedLobby;
     private string playerName;
+    //private bool alreadyStartedGame;
+
+    
 
 
     private void Awake() {
@@ -67,6 +68,7 @@ public class LobbyManager : MonoBehaviour {
     }
 
     public async void Authenticate(string playerName) {
+        playerName = playerName.Replace(" ", "_");
         this.playerName = playerName;
         InitializationOptions initializationOptions = new InitializationOptions();
         initializationOptions.SetProfile(playerName);
@@ -119,6 +121,12 @@ public class LobbyManager : MonoBehaviour {
 
                 OnJoinedLobbyUpdate?.Invoke(this, new LobbyEventArgs { lobby = joinedLobby });
 
+                if (!IsLobbyHost()) {
+                    if (joinedLobby.Data[KEY_RELAY_JOIN_CODE].Value != "") {
+                        JoinGame(joinedLobby.Data[KEY_RELAY_JOIN_CODE].Value);
+                    }
+                }
+
                 if (!IsPlayerInLobby()) {
                     // Player was kicked out of this lobby
                     Debug.Log("Kicked from Lobby!");
@@ -126,11 +134,6 @@ public class LobbyManager : MonoBehaviour {
                     OnKickedFromLobby?.Invoke(this, new LobbyEventArgs { lobby = joinedLobby });
 
                     joinedLobby = null;
-                }
-
-                if (joinedLobby.Data.ContainsKey("GameStarted") && joinedLobby.Data["GameStarted"].Value == "true") {
-                    Debug.Log("Game started by host. Loading game scene...");
-                    UnityEngine.SceneManagement.SceneManager.LoadScene("MainScene");
                 }
             }
         }
@@ -159,7 +162,7 @@ public class LobbyManager : MonoBehaviour {
     private Player GetPlayer() {
         return new Player(AuthenticationService.Instance.PlayerId, null, new Dictionary<string, PlayerDataObject> {
             { KEY_PLAYER_NAME, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, playerName) },
-            { KEY_PLAYER_CHARACTER, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, PlayerCharacter.RedCharacter.ToString()) }
+            { KEY_PLAYER_STATUS, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, PlayerStatus.PlayerRed.ToString()) }
         });
     }
 
@@ -189,7 +192,8 @@ public class LobbyManager : MonoBehaviour {
             Player = player,
             IsPrivate = isPrivate,
             Data = new Dictionary<string, DataObject> {
-                { KEY_GAME_MODE, new DataObject(DataObject.VisibilityOptions.Public, gameMode.ToString()) }
+                { KEY_GAME_MODE, new DataObject(DataObject.VisibilityOptions.Public, gameMode.ToString()) },
+                { KEY_RELAY_JOIN_CODE, new DataObject(DataObject.VisibilityOptions.Member, "") }
             }
         };
 
@@ -279,16 +283,16 @@ public class LobbyManager : MonoBehaviour {
         }
     }
 
-    public async void UpdatePlayerCharacter(PlayerCharacter playerCharacter) {
+    public async void UpdatePlayerStatus(PlayerStatus playerStatus) {
         if (joinedLobby != null) {
             try {
                 UpdatePlayerOptions options = new UpdatePlayerOptions();
 
                 options.Data = new Dictionary<string, PlayerDataObject>() {
                     {
-                        KEY_PLAYER_CHARACTER, new PlayerDataObject(
+                        KEY_PLAYER_STATUS, new PlayerDataObject(
                             visibility: PlayerDataObject.VisibilityOptions.Public,
-                            value: playerCharacter.ToString())
+                            value: playerStatus.ToString())
                     }
                 };
 
@@ -360,28 +364,57 @@ public class LobbyManager : MonoBehaviour {
     }
 
     public async void StartGame() {
-        if (joinedLobby == null) {
-        Debug.LogError("Cannot start game: No lobby joined.");
-        return;
+        try {
+            Debug.Log("Game started by host.");
+
+            // Setze ein Datenfeld im Lobby-Objekt, um den Spielstart zu signalisieren
+            Lobby lobby = await Lobbies.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions {
+                Data = new Dictionary<string, DataObject> {
+                    { KEY_START_GAME, new DataObject(DataObject.VisibilityOptions.Public, "1") }
+                }
+            });
+
+
+            joinedLobby = lobby;
+
+            IsHost = true;
+            //alreadyStartedGame = true;
+            SceneManager.LoadScene("MainScene");
+
+            OnLobbyStartGame?.Invoke(this, new LobbyEventArgs { lobby = joinedLobby });
+        } catch (LobbyServiceException e) {
+            Debug.LogError("Failed to start game: " + e);
+            return;
+        }
+    }
+
+    private void JoinGame(string relayJoinCode) {
+        Debug.Log("JoinGame " + relayJoinCode);
+        if (string.IsNullOrEmpty(relayJoinCode)) {
+            Debug.Log("Invalid Relay code, wait");
+            return;
         }
 
-        if (IsLobbyHost()) {
-            try {
-                // Setze ein Datenfeld im Lobby-Objekt, um den Spielstart zu signalisieren
-                joinedLobby = await Lobbies.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions {
-                    Data = new Dictionary<string, DataObject> {
-                        { "GameStarted", new DataObject(DataObject.VisibilityOptions.Public, "true") }
-                    }
-                });
+        IsHost = false;
+        RelayJoinCode = relayJoinCode;
+        SceneManager.LoadScene("MainScene");
+        //alreadyStartedGame = true;
+        OnLobbyStartGame?.Invoke(this, new LobbyEventArgs { lobby = joinedLobby });
+    }
 
-                Debug.Log("Game started by host.");
-            } catch (LobbyServiceException e) {
-                Debug.LogError("Failed to start game: " + e);
-                return;
-            }
+    public async void SetRelayJoinCode(string relayJoinCode) {
+        try {
+            Debug.Log("SetRelayJoinCode " + relayJoinCode);
+
+            Lobby lobby = await Lobbies.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions {
+                Data = new Dictionary<string, DataObject> {
+                    { KEY_RELAY_JOIN_CODE, new DataObject(DataObject.VisibilityOptions.Member, relayJoinCode) }
+                }
+            });
+
+            joinedLobby = lobby;
+        } catch (LobbyServiceException e) {
+            Debug.Log(e);
         }
-
-        // Wechsel in die Spielszene für alle Spieler
-        //UnityEngine.SceneManagement.SceneManager.LoadScene("GameScene");
-    }    
+    }
 }

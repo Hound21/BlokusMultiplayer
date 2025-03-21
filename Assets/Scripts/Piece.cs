@@ -85,7 +85,8 @@ public class Piece : NetworkBehaviour
 
     private void OnMouseDown()
     {
-        if (GameManager.Instance.GetCurrentPlayerStatus() == playerStatus && !isPlaced.Value)
+        PlayerStatus currentPlayerStatus = GameManager.Instance.GetCurrentPlayerStatus();
+        if (GameManager.Instance.GetLocalPlayerStatus() == currentPlayerStatus && currentPlayerStatus == playerStatus && !isPlaced.Value)
         {
             BeginDragging();
         }
