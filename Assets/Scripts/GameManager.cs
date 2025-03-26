@@ -12,12 +12,14 @@ public class GameManager : NetworkBehaviour
 {
     public static GameManager Instance { get; private set; }
     public Board board;
-    public PlayerDataSO playerData;
+
     public Button playerFinishedButton;
     private PlayerStatus localPlayerStatus;
     private string localPlayerName;
-    public Dictionary<PlayerStatus, LocalPlayer> players;
-    public NetworkVariable<PlayerStatus> currentPlayerStatus = new NetworkVariable<PlayerStatus>();
+    public Dictionary<PlayerStatus, LocalPlayer> players = new Dictionary<PlayerStatus, LocalPlayer>();
+    public NetworkVariable<PlayerStatus> currentPlayerStatus = new NetworkVariable<PlayerStatus>(PlayerStatus.None);
+    public NetworkList<int> boardOccupied;
+
     private List<PlayerStatus> playerOrder = new List<PlayerStatus>{
         PlayerStatus.PlayerRed, PlayerStatus.PlayerGreen, PlayerStatus.PlayerBlue, PlayerStatus.PlayerYellow
     };
@@ -28,25 +30,35 @@ public class GameManager : NetworkBehaviour
 
     private void Awake()
     {
-        Instance = this;
+        if (Instance == null) {
+            Instance = this;
+        }
+        else {
+            Destroy(gameObject);
+        }
 
-        players = new Dictionary<PlayerStatus, LocalPlayer>();
+        boardOccupied = new NetworkList<int>();
 
+        // Initialize boardOccupied
+        if (IsServer)
+        {
+           InitializeBoardOccupied();
+        }
+
+        /*
         players[PlayerStatus.PlayerRed] = new LocalPlayer(PlayerStatus.PlayerRed, Color.red);
         players[PlayerStatus.PlayerGreen] = new LocalPlayer(PlayerStatus.PlayerGreen, Color.green);
         players[PlayerStatus.PlayerBlue] = new LocalPlayer(PlayerStatus.PlayerBlue, Color.blue);
         players[PlayerStatus.PlayerYellow] = new LocalPlayer(PlayerStatus.PlayerYellow, Color.yellow);
+        
 
-        if (board != null)
-        {
-            board.InitializeBoard();
-        }
         // add pieces to players
         foreach (Piece piece in FindObjectsOfType<Piece>())
         {
             players[piece.playerStatus].AddPiece(piece);
         }            
         //currentPlayerStatus = playerOrder[0];
+        */
 
         if (playerFinishedButton != null)
         {
@@ -59,27 +71,41 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("OnNetworkSpawn: " + NetworkManager.Singleton.LocalClientId);
 
-        /* get color from lobby player and set it to player
-        if (NetworkManager.Singleton.ConnectedClients.TryGetValue(NetworkManager.Singleton.LocalClientId, out var networkedClient))
-        {
-            localPlayerStatus = networkedClient.PlayerObject.Data[LobbyManager.KEY_PLAYER_STATUS].Value;
-            Debug.Log("Local player status: " + localPlayerStatus);
-        }
-        */
+        LobbyManager.Instance.UpdatePlayerNetworkId();
+        localPlayerStatus = LobbyManager.Instance.GetCurrentPlayerStatus();
+        Debug.Log("Local Player Status: " + localPlayerStatus + "mit NetworkID-PlayerStatus: " + LobbyManager.Instance.GetPlayerStatusByNetworkId(NetworkManager.Singleton.LocalClientId.ToString()));
 
+        // server muss wisser wer connected ist
         if (IsServer) {
             NetworkManager.Singleton.OnClientConnectedCallback += NetworkManager_OnClientConnectedCallback;
         }
-
+        
+        // bisher nicht benutzt aber wird später für die anzeige wer dran ist benötigt
         currentPlayerStatus.OnValueChanged += (PlayerStatus oldPlayerStatus, PlayerStatus newPlayerStatus) =>
         {
             OnCurrentPlayerStatusChanged?.Invoke(this, EventArgs.Empty);
         };
     }
 
-    private void NetworkManager_OnClientConnectedCallback(ulong obj)
+    private void NetworkManager_OnClientConnectedCallback(ulong clientId)
     {
-        if (NetworkManager.Singleton.ConnectedClientsList.Count == 2) //TODO change hard coded 2
+        Debug.Log("OnClientConnectedCallback: clientId =" + clientId);
+
+        PlayerStatus clientPlayerStatus = LobbyManager.Instance.GetPlayerStatusByNetworkId(clientId.ToString());
+        if (clientPlayerStatus == PlayerStatus.None) {
+            Debug.LogError("Client has no player status");
+            return;
+        }
+        if (players.ContainsKey(clientPlayerStatus)) {
+            Debug.LogError("Player status already exists");
+            return;
+        }
+        players[clientPlayerStatus] = new LocalPlayer(clientPlayerStatus, GetColorForPlayerStatus(clientPlayerStatus));
+        Debug.Log("Player " + clientPlayerStatus + " added");
+
+
+        // if all players are connected, start the game
+        if (NetworkManager.Singleton.ConnectedClientsList.Count == 4) //TODO change hard coded 2
         {
             // Start game
             currentPlayerStatus.Value = PlayerStatus.PlayerRed;
@@ -87,9 +113,28 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    // bisher nicht benutzt
     [Rpc(SendTo.ClientsAndHost)]
     private void TriggerOnGameStartedRpc() {
         OnGameStarted?.Invoke(this, EventArgs.Empty);
+    }
+
+    // wird nur vom Server aufgerufen
+    private void InitializeBoardOccupied()
+    {
+        for (int i = 0; i < Board.boardYSize; i++)
+            {
+                for (int j = 0; j < Board.boardXSize; j++)
+                {
+                    boardOccupied.Add((int)PlayerStatus.None);
+                }
+            }
+    }
+
+    [Rpc(SendTo.Server)]
+    public void SetTileOccupiedRpc(Vector2Int tilePos, PlayerStatus playerStatus)
+    {
+        boardOccupied[tilePos.x + tilePos.y * Board.boardXSize] = (int)playerStatus;
     }
 
     public void EndTurn(Piece piece)
@@ -198,4 +243,28 @@ public class GameManager : NetworkBehaviour
     {
         return players[playerStatus];
     }
+
+    public Color GetColorForPlayerStatus(PlayerStatus playerStatus)
+    {
+        switch (playerStatus)
+        {
+            case PlayerStatus.PlayerRed:
+                return Color.red;
+            case PlayerStatus.PlayerGreen:
+                return Color.green;
+            case PlayerStatus.PlayerBlue:
+                return Color.blue;
+            case PlayerStatus.PlayerYellow:
+                return Color.yellow;
+            default:
+                return Color.white;
+        }
+    }
+
+    // override onDestroy to dispose boardOccupied
+    public override void OnDestroy()
+    {
+        boardOccupied.Dispose();
+    }
+
 }

@@ -7,7 +7,6 @@ public class Board : NetworkBehaviour
 {
     public Tile tilePrefab;
     public Tile[,] boardTiles;
-    private NetworkList<int> boardOccupied;
     public const int boardXSize = 20;
     public const int boardYSize = 20;
 
@@ -15,13 +14,8 @@ public class Board : NetworkBehaviour
 
     void Start()
     {
-        boardOccupied = new NetworkList<int>();
         boardTiles = new Tile[boardXSize, boardYSize];
-        if (boardTiles[0, 0] == null)
-        {
-            InitializeBoard();
-            InitializeBoardOccupied();
-        }
+        InitializeBoard();
     }
 
 
@@ -57,16 +51,6 @@ public class Board : NetworkBehaviour
         }
     }
 
-    public void InitializeBoardOccupied()
-    {
-        for (int i = 0; i < boardYSize; i++)
-        {
-            for (int j = 0; j < boardXSize; j++)
-            {
-                boardOccupied.Add((int)PlayerStatus.None);
-            }
-        }
-    }
 
     public Vector2Int GetClosestTileGridPosition(Vector3 position)
     {
@@ -245,18 +229,13 @@ public class Board : NetworkBehaviour
     {
             foreach (var tileGridPos in tileGridPositions.Values)
             {
-                SetTileOccupied(tileGridPos, playerStatus);
+                GameManager.Instance.SetTileOccupiedRpc(tileGridPos, playerStatus);
             }
-    }
-
-    private void SetTileOccupied(Vector2Int tilePos, PlayerStatus playerStatus)
-    {
-        boardOccupied[tilePos.x + tilePos.y * boardXSize] = (int)playerStatus;
     }
 
     private PlayerStatus GetGridPositionOccupant(Vector2Int pos) //OVERLOADED
     {
-        return (PlayerStatus)boardOccupied[pos.x + pos.y * boardXSize];
+        return (PlayerStatus)GameManager.Instance.boardOccupied[pos.x + pos.y * boardXSize];
     }
 
     /* nichtmehr benutzt

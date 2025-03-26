@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unity.Netcode;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Lobbies;
@@ -17,6 +18,7 @@ public class LobbyManager : MonoBehaviour {
 
     public const string KEY_PLAYER_NAME = "PlayerName";
     public const string KEY_PLAYER_STATUS = "PlayerStatus";
+    public const string KEY_PLAYER_NETWORK_ID = "PlayerNetworkId";
     public const string KEY_GAME_MODE = "GameMode";
     public const string KEY_START_GAME = "StartGame";
     public const string KEY_RELAY_JOIN_CODE = "RelayJoinCode";
@@ -58,13 +60,20 @@ public class LobbyManager : MonoBehaviour {
 
 
     private void Awake() {
+        if (Instance != null && Instance != this) {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
+        DontDestroyOnLoad(gameObject);
     }
 
     private void Update() {
         //HandleRefreshLobbyList(); // Disabled Auto Refresh for testing with multiple builds
-        HandleLobbyHeartbeat();
-        HandleLobbyPolling();
+        if (SceneManager.GetActiveScene().name == "Lobby") {
+            HandleLobbyHeartbeat();
+            HandleLobbyPolling();
+        }
     }
 
     public async void Authenticate(string playerName) {
@@ -164,6 +173,15 @@ public class LobbyManager : MonoBehaviour {
             { KEY_PLAYER_NAME, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, playerName) },
             { KEY_PLAYER_STATUS, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, PlayerStatus.PlayerRed.ToString()) }
         });
+    }
+
+    public Player GetCurrentPlayer() {
+        foreach (Player player in joinedLobby.Players) {
+            if (player.Id == AuthenticationService.Instance.PlayerId) {
+                return player;
+            }
+        }
+        return null;
     }
 
     public void ChangeGameMode() {
@@ -416,5 +434,44 @@ public class LobbyManager : MonoBehaviour {
         } catch (LobbyServiceException e) {
             Debug.Log(e);
         }
+    }
+
+    public async void UpdatePlayerNetworkId() {
+        try {
+            var currentPlayer = Instance.GetCurrentPlayer();
+            var updatedPlayerData = currentPlayer.Data;
+            updatedPlayerData.Add(KEY_PLAYER_NETWORK_ID, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, NetworkManager.Singleton.LocalClientId.ToString()));
+            var updatedPlayerOptions = new UpdatePlayerOptions {
+                Data = updatedPlayerData
+            };
+            await LobbyService.Instance.UpdatePlayerAsync(joinedLobby.Id, currentPlayer.Id, updatedPlayerOptions);
+
+        }
+        catch (Exception e) {
+            Console.WriteLine(e);
+            throw;
+        }
+    }
+
+    public PlayerStatus GetPlayerStatusByNetworkId(string networkId) {
+        if (networkId != "0") {
+            Debug.Log("GetPlayerStatusByNetworkId not 0: " + networkId);
+        }
+
+
+        foreach (Player player in joinedLobby.Players) {
+            if (player.Data.TryGetValue(KEY_PLAYER_NETWORK_ID, out var playerNetworkIdData)) {
+                if (playerNetworkIdData.Value == networkId) {
+                    player.Data.TryGetValue(KEY_PLAYER_STATUS, out var playerStatusData);
+                    return Enum.Parse<PlayerStatus>(playerStatusData.Value);
+                }
+            }
+        }
+        return PlayerStatus.None;
+    }
+
+    public PlayerStatus GetCurrentPlayerStatus() {
+        GetCurrentPlayer().Data.TryGetValue(KEY_PLAYER_STATUS, out var playerStatusData);
+        return Enum.Parse<PlayerStatus>(playerStatusData.Value);
     }
 }

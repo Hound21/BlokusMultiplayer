@@ -81,6 +81,10 @@ public class LobbyUI : MonoBehaviour {
     }
 
     private void UpdateLobby(Lobby lobby) {
+        // only run if we arent yet in game
+        if (GameManager.Instance != null) {
+            return;
+        }
         ClearLobby();
 
         foreach (Player player in lobby.Players) {

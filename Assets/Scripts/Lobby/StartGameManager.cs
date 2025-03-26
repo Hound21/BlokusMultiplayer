@@ -4,14 +4,9 @@ using Unity.Networking.Transport.Relay;
 using Unity.Services.Relay.Models;
 using Unity.Services.Relay;
 using UnityEngine;
-using Unity.Services.Authentication;
-using Unity.Services.Core;
-using Unity.Services.Lobbies;
-using Unity.Services.Lobbies.Models;
 
 public class StartGameManager : MonoBehaviour {
 
-    public PlayerDataSO playerData;
 
     private void Start() {
         LobbyManager.Instance.OnLobbyStartGame += LobbyManager_OnLobbyStartGame;
@@ -28,12 +23,7 @@ public class StartGameManager : MonoBehaviour {
     }
 
     public void StartHost() {
-        playerData.playerNames.Clear();
-        playerData.playerStati.Clear();
-
         NetworkManager.Singleton.StartHost();
-
-        playerData.playerStati.Add(NetworkManager.Singleton.LocalClientId.ToString(), );
     }
 
     public void StartClient() {
