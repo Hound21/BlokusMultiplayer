@@ -3,23 +3,26 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 using System.Linq;
-using UnityEngine.UI;
 using Unity.Netcode;
 using Unity.Services.Lobbies;
 using Unity.Services.Lobbies.Models;
+using UnityEngine.UI;
+using System.Drawing;
+using Unity.Collections;
 
 public class GameManager : NetworkBehaviour
 {
     [SerializeField] private bool debugMode = false; // Set this in the Inspector
-    [SerializeField] private bool startAsHost = true; // True = Host, False = Client
+
+    public const int COUNT_PIECES_PER_PLAYER = 3;
 
     public static GameManager Instance { get; private set; }
     public Board board;
 
     public Button playerFinishedButton;
     private PlayerStatus localPlayerStatus;
-    private string localPlayerName;
-    public Dictionary<PlayerStatus, LocalPlayer> players = new Dictionary<PlayerStatus, LocalPlayer>();
+    //private string localPlayerName;
+    public NetworkList<LocalPlayerData> playerDataList;
     public NetworkVariable<PlayerStatus> currentPlayerStatus = new NetworkVariable<PlayerStatus>(PlayerStatus.None);
     public NetworkList<int> boardOccupied;
 
@@ -40,20 +43,15 @@ public class GameManager : NetworkBehaviour
             Destroy(gameObject);
         }
 
-        boardOccupied = new NetworkList<int>();
+        boardOccupied = new NetworkList<int>(new List<int>(), NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+        playerDataList = new NetworkList<LocalPlayerData>(new List<LocalPlayerData>(), NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
-        // Initialize boardOccupied
-        if (IsServer)
-        {
-           InitializeBoardOccupied();
-        }
-     
         //currentPlayerStatus = playerOrder[0];
 
 
         if (playerFinishedButton != null)
         {
-            playerFinishedButton.onClick.AddListener(OnPlayerFinishedButtonPressed);
+            playerFinishedButton.onClick.AddListener(() => OnPlayerFinishedButtonPressed());
             playerFinishedButton.gameObject.SetActive(false);
         }
     }
@@ -72,6 +70,8 @@ public class GameManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        base.OnNetworkSpawn();
+
         if (!debugMode) {
             localPlayerStatus = LobbyManager.Instance.GetCurrentPlayerStatus();
             Debug.Log("Set local player Status: " + localPlayerStatus);
@@ -86,7 +86,13 @@ public class GameManager : NetworkBehaviour
             }
         }
 
-        UpdateNetworkIdOnServerRpc(NetworkManager.Singleton.LocalClientId.ToString(), localPlayerStatus);
+        // Initialize boardOccupied
+        if (IsServer)
+        {
+           InitializeBoardOccupied();
+        }
+
+        AddPlayerServerRpc(NetworkManager.Singleton.LocalClientId.ToString(), localPlayerStatus);
 
         if (IsServer) {
             NetworkManager.Singleton.OnClientConnectedCallback += NetworkManager_OnClientConnectedCallback;
@@ -104,9 +110,9 @@ public class GameManager : NetworkBehaviour
         Debug.Log("OnClientConnectedCallback: clientId =" + clientId);
         
         // print every player from players
-        foreach (var player in players)
+        foreach (var player in playerDataList)
         {
-            Debug.Log("Player: " + player.Key + " with clientId: " + player.Value.clientId);
+            Debug.Log("Player: " + player.playerStatus + " clientId: " + player.clientId);
         }
 
 
@@ -115,35 +121,29 @@ public class GameManager : NetworkBehaviour
         {
             // Start game
             currentPlayerStatus.Value = PlayerStatus.PlayerRed;
-            TriggerOnGameStartedRpc();
+            TriggerOnGameStartedServerRpc();
         }
     }
 
-    [Rpc(SendTo.Server)]
-    public void UpdateNetworkIdOnServerRpc(string networkId, PlayerStatus playerStatus)
+    [ServerRpc]
+    public void AddPlayerServerRpc(string networkId, PlayerStatus playerStatus)
     {
-        if (IsServer)
-        {
-            Debug.Log($"Updating NetworkId on Server: {networkId} for PlayerStatus: {playerStatus}");
-            if (!players.ContainsKey(playerStatus))
-            {
-                players[playerStatus] = new LocalPlayer(playerStatus, GetColorForPlayerStatus(playerStatus), networkId);
-            }
-        }
+        if (!IsServer) return;
+
+        playerDataList.Add(new LocalPlayerData {
+            playerStatus = playerStatus,
+            clientId = networkId,
+            points = 0,
+            availablePiecesCount = COUNT_PIECES_PER_PLAYER,
+            isFinished = false,
+            pressedPlayerFinishButton = false,
+        });
     }
 
     // bisher nicht benutzt
-    [Rpc(SendTo.ClientsAndHost)]
-    private void TriggerOnGameStartedRpc() {
+    [ServerRpc]
+    private void TriggerOnGameStartedServerRpc() {
         OnGameStarted?.Invoke(this, EventArgs.Empty);
-
-        // add pieces to players
-        if (IsServer) {
-            foreach (Piece piece in FindObjectsOfType<Piece>())
-            {
-                players[piece.playerStatus].AddPiece(piece);
-            }   
-        }
     }
 
     // wird nur vom Server aufgerufen
@@ -158,30 +158,62 @@ public class GameManager : NetworkBehaviour
             }
     }
 
-    [Rpc(SendTo.Server)]
+    // wird nur vom Server aufgerufen
+    public void SetTilesOccupied(Vector2IntList tileGridPositions, PlayerStatus playerStatus)
+    {
+            foreach (var tileGridPos in tileGridPositions.Values)
+            {
+                SetTileOccupiedRpc(tileGridPos, playerStatus);
+            }
+    }
+
+    // wird somit auch nur vom Server aufgerufen
     public void SetTileOccupiedRpc(Vector2Int tilePos, PlayerStatus playerStatus)
     {
+        if (!IsServer) return;
         boardOccupied[tilePos.x + tilePos.y * Board.boardXSize] = (int)playerStatus;
     }
 
+    // wird nur vom Server aufgerufen
     public void EndTurn(Piece piece)
     {
-        LocalPlayer currentPlayer = players[currentPlayerStatus.Value];
+        if (!IsServer) return;
 
+        // Finde den aktuellen Spieler
+        int currentPlayerIndex = GetCurrentPlayerIndex();
+        var currentPlayer = playerDataList[currentPlayerIndex];
+
+        // Aktualisiere Punkte und verfügbare Pieces
         if (piece != null)
         {
-            currentPlayer.RemovePiece(piece);
-            currentPlayer.AddPoints(piece.points);
+            currentPlayer.points += piece.points;
+            currentPlayer.availablePiecesCount--;
         }
 
-        if (currentPlayer.availablePieces.Count == 0 || currentPlayer.pressedPlayerFinishButton)
+        // Überprüfe, ob der Spieler fertig ist
+        if (currentPlayer.availablePiecesCount == 0 || currentPlayer.pressedPlayerFinishButton)
         {
             currentPlayer.isFinished = true;
-            Debug.Log(currentPlayer.playerStatus + " is finshed.");
+            Debug.Log(currentPlayer.playerStatus + " is finished.");
         }
 
-        if (players.Values.All(player => player.isFinished))
+        // Aktualisiere die Daten des Spielers
+        playerDataList[currentPlayerIndex] = currentPlayer;
+
+        // Überprüfe, ob alle Spieler fertig sind
+        bool allFinished = true;
+        foreach (var player in playerDataList)
         {
+            if (!player.isFinished)
+            {
+                allFinished = false;
+                break;
+            }
+        }
+
+        if (allFinished)
+        {
+            Debug.Log("All players are finished.");
             GameOver();
             return;
         }
@@ -194,61 +226,121 @@ public class GameManager : NetworkBehaviour
     {
         do
         {
-            currentPlayerStatus.Value = playerOrder[(playerOrder.IndexOf(currentPlayerStatus.Value) + 1) % playerOrder.Count];
-        } while (players[currentPlayerStatus.Value].isFinished);
+            // Wechsle zum nächsten Spieler in der Reihenfolge
+            int currentIndex = playerOrder.IndexOf(currentPlayerStatus.Value);
+            currentPlayerStatus.Value = playerOrder[(currentIndex + 1) % playerOrder.Count];
+
+            // Überprüfe, ob der nächste Spieler fertig ist
+            bool isFinished = false;
+            foreach (var player in playerDataList)
+            {
+                if (player.playerStatus == currentPlayerStatus.Value)
+                {
+                    isFinished = player.isFinished;
+                    break;
+                }
+            }
+
+            // Wiederhole, falls der Spieler fertig ist
+            if (!isFinished) break;
+
+        } while (true);
 
         movesPlayed++;
-        UpdatePlayerFinishedButton();
+        UpdatePlayerFinishedButtonClientRpc();
     }
 
     public void GameOver()
     {
-        Debug.Log("Game Over");
+        if (!IsServer) return;
+
+        Debug.Log("Server Game Over");
 
         // Find player with max points
         int maxPoints = int.MinValue;
-        List<LocalPlayer> topPlayers = new List<LocalPlayer>();
+        List<LocalPlayerData> topPlayers = new List<LocalPlayerData>();
 
-        foreach (var player in players.Values)
+        foreach (var player in playerDataList)
         {
-            if (player.Points > maxPoints)
+            if (player.points > maxPoints)
             {
-                maxPoints = player.Points;
+                maxPoints = player.points;
                 topPlayers.Clear();
                 topPlayers.Add(player);
             }
-            else if (player.Points == maxPoints)
+            else if (player.points == maxPoints)
             {
                 topPlayers.Add(player);
             }
+        }
+
+        // Erstelle eine Liste mit den Punkten aller Spieler
+        List<PlayerStatus> allPlayerStatuses = new List<PlayerStatus>();
+        List<int> allPlayerPoints = new List<int>();
+        foreach (var player in playerDataList)
+        {
+            allPlayerStatuses.Add(player.playerStatus);
+            allPlayerPoints.Add(player.points);
         }
 
         // Prüfe, ob es ein Unentschieden gibt
         if (topPlayers.Count > 1)
         {
-            Debug.Log("It's a draw between: " + string.Join(", ", topPlayers.Select(p => p.playerStatus)));
+            Debug.Log("Server: It's a draw between: " + string.Join(", ", topPlayers.Select(p => p.playerStatus)));
+            GameOverClientRpc(true, topPlayers.Select(p => p.playerStatus).ToArray(), maxPoints, allPlayerStatuses.ToArray(), allPlayerPoints.ToArray());
         }
         else
         {
-            Debug.Log(topPlayers[0].playerStatus + " wins!");
+            Debug.Log("Server: " + topPlayers[0].playerStatus + " wins!");
+            GameOverClientRpc(false, new PlayerStatus[] { topPlayers[0].playerStatus }, maxPoints, allPlayerStatuses.ToArray(), allPlayerPoints.ToArray());
+        }
+    }
+
+    [ClientRpc]
+    private void GameOverClientRpc(bool isDraw, PlayerStatus[] winners, int points, PlayerStatus[] allPlayerStatuses, int[] allPlayerPoints)
+    {
+        if (isDraw)
+        {
+            Debug.Log("Game Over! It's a draw between: " + string.Join(", ", winners) + " with " + points + " points.");
+        }
+        else
+        {
+            Debug.Log("Game Over! Winner: " + winners[0] + " with " + points + " points.");
         }
 
-        Debug.Log("Points:");
-        foreach (var player in players.Values)
+        Debug.Log("Points for all players:");
+        for (int i = 0; i < allPlayerStatuses.Length; i++)
         {
-            Debug.Log(player.playerStatus + ": " + player.Points);
+            Debug.Log(allPlayerStatuses[i] + ": " + allPlayerPoints[i] + " points");
         }
     }
 
     public void OnPlayerFinishedButtonPressed()
     {
-        players[currentPlayerStatus.Value].pressedPlayerFinishButton = true;
+        OnPlayerFinishedButtonPressedServerRpc(localPlayerStatus);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void OnPlayerFinishedButtonPressedServerRpc(PlayerStatus playerStatus)
+    {
+        if (!IsServer) return;
+
+        SetPlayerFinishedButtonPressed(playerStatus, true);
+        Debug.Log(playerStatus + " pressed the finish button.");
+
         EndTurn(null);
     }
 
-    private void UpdatePlayerFinishedButton() //TODO
+    [ClientRpc]
+    private void UpdatePlayerFinishedButtonClientRpc()
     {
-        if (playerFinishedButton != null && movesPlayed >= 4)
+        var localPlayerData = GetLocalPlayerData();
+
+        if (localPlayerData.isFinished || localPlayerData.pressedPlayerFinishButton || movesPlayed <= 8)
+        {
+            playerFinishedButton.gameObject.SetActive(false);
+        }
+        else
         {
             playerFinishedButton.gameObject.SetActive(true);
         }
@@ -265,26 +357,93 @@ public class GameManager : NetworkBehaviour
         return localPlayerStatus;
     }
 
-
-    public LocalPlayer GetPlayerByPlayerStatus(PlayerStatus playerStatus)
+    public int GetCurrentPlayerIndex()
     {
-        return players[playerStatus];
+        for (int i = 0; i < playerDataList.Count; i++)
+        {
+            if (playerDataList[i].playerStatus == currentPlayerStatus.Value)
+            {
+                return i;
+            }
+        }
+        return -1; // Spieler nicht gefunden
     }
 
-    public Color GetColorForPlayerStatus(PlayerStatus playerStatus)
+    public LocalPlayerData GetLocalPlayerData()
+    {
+        string localClientId = NetworkManager.Singleton.LocalClientId.ToString();
+
+        foreach (var player in playerDataList)
+        {
+            if (player.clientId.ToString() == localClientId)
+            {
+                return player;
+            }
+        }
+
+        // Rückgabe eines Standardwerts, falls kein Spieler gefunden wird
+        return default;
+    }
+
+    public LocalPlayerData GetPlayerDataByStatus(PlayerStatus playerStatus)
+    {
+        foreach (var player in playerDataList)
+        {
+            if (player.playerStatus == playerStatus)
+            {
+                return player;
+            }
+        }
+
+        // Rückgabe eines Standardwerts, falls kein Spieler gefunden wird
+        return default;
+    }
+
+    // wird nur vom Server aufgerufen
+    public void SetFirstPiecePlacedForPlayerStatus(PlayerStatus playerStatus, bool value)
+    {
+        for (int i = 0; i < playerDataList.Count; i++)
+        {
+            if (playerDataList[i].playerStatus == playerStatus)
+            {
+                var playerData = playerDataList[i];
+                playerData.firstPiecePlaced = value;
+                playerDataList[i] = playerData;
+                break;
+            }
+        }
+    }
+
+    // wird nur vom Server aufgerufen
+    public void SetPlayerFinishedButtonPressed(PlayerStatus playerStatus, bool value)
+    {
+        for (int i = 0; i < playerDataList.Count; i++)
+        {
+            if (playerDataList[i].playerStatus == playerStatus)
+            {
+                var playerData = playerDataList[i];
+                playerData.pressedPlayerFinishButton = value;
+                playerDataList[i] = playerData;
+                break;
+            }
+        }
+    }
+
+
+    public UnityEngine.Color GetColorForPlayerStatus(PlayerStatus playerStatus)
     {
         switch (playerStatus)
         {
             case PlayerStatus.PlayerRed:
-                return Color.red;
+                return UnityEngine.Color.red;
             case PlayerStatus.PlayerGreen:
-                return Color.green;
+                return UnityEngine.Color.green;
             case PlayerStatus.PlayerBlue:
-                return Color.blue;
+                return UnityEngine.Color.blue;
             case PlayerStatus.PlayerYellow:
-                return Color.yellow;
+                return UnityEngine.Color.yellow;
             default:
-                return Color.white;
+                return UnityEngine.Color.white;
         }
     }
 
@@ -292,6 +451,57 @@ public class GameManager : NetworkBehaviour
     public override void OnDestroy()
     {
         boardOccupied.Dispose();
+        playerDataList.Dispose();
     }
 
 }
+
+
+[Serializable]
+public struct LocalPlayerData : INetworkSerializable, IEquatable<LocalPlayerData>
+{
+    public PlayerStatus playerStatus;
+    public FixedString128Bytes clientId;
+    public int availablePiecesCount;
+    public int points;
+    public bool isFinished;
+    public bool firstPiecePlaced;
+    public bool pressedPlayerFinishButton;
+
+    // Implementierung von INetworkSerializable
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref playerStatus);
+        serializer.SerializeValue(ref clientId);
+        serializer.SerializeValue(ref availablePiecesCount);
+        serializer.SerializeValue(ref points);
+        serializer.SerializeValue(ref isFinished);
+        serializer.SerializeValue(ref firstPiecePlaced);
+        serializer.SerializeValue(ref pressedPlayerFinishButton);
+    }
+
+    // Implementierung von IEquatable<LocalPlayerData>
+    public bool Equals(LocalPlayerData other)
+    {
+        return playerStatus == other.playerStatus &&
+               clientId.Equals(other.clientId) &&
+               availablePiecesCount == other.availablePiecesCount &&
+               points == other.points &&
+               isFinished == other.isFinished &&
+               firstPiecePlaced == other.firstPiecePlaced &&
+               pressedPlayerFinishButton == other.pressedPlayerFinishButton;
+    }
+
+    // Überschreibe GetHashCode (optional, aber empfohlen)
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(playerStatus, clientId, availablePiecesCount, points, isFinished, firstPiecePlaced, pressedPlayerFinishButton);
+    }
+
+    // Überschreibe Equals für object (optional, aber empfohlen)
+    public override bool Equals(object obj)
+    {
+        return obj is LocalPlayerData other && Equals(other);
+    }
+}
+

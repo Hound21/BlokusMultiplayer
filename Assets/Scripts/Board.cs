@@ -125,7 +125,7 @@ public class Board : NetworkBehaviour
             }
         }
 
-        LocalPlayer player = GameManager.Instance.players[playerStatus];
+        LocalPlayerData player = GameManager.Instance.GetPlayerDataByStatus(playerStatus);
 
         // Check starting corner for first piece
         if (!player.firstPiecePlaced)
@@ -225,17 +225,12 @@ public class Board : NetworkBehaviour
     }
 
 
-    public void SetTilesOccupied(Vector2IntList tileGridPositions, PlayerStatus playerStatus)
-    {
-            foreach (var tileGridPos in tileGridPositions.Values)
-            {
-                GameManager.Instance.SetTileOccupiedRpc(tileGridPos, playerStatus);
-            }
-    }
-
     private PlayerStatus GetGridPositionOccupant(Vector2Int pos) //OVERLOADED
     {
-        Debug.Log("Debug");
+        if (!IsPositionOnBoard(pos))
+        {
+            return PlayerStatus.None;
+        }
         return (PlayerStatus)GameManager.Instance.boardOccupied[pos.x + pos.y * boardXSize];
     }
 
@@ -248,13 +243,24 @@ public class Board : NetworkBehaviour
 
     private bool IsPositionOnBoard(Vector2Int pos)
     {
-        if (pos.x < 0 || pos.x >= boardXSize || pos.y < 0 || pos.y >= boardYSize)
+        int index = pos.x + pos.y * boardXSize;
+        if (index < 0 || index >= boardXSize * boardYSize)
         {
             return false;
         }
         return true;
     }
 
+    /*
+    private bool IsPositionOnBoard(Vector2Int pos)
+    {
+        if (pos.x < 0 || pos.x >= boardXSize || pos.y < 0 || pos.y >= boardYSize)
+        {
+            return false;
+        }
+        return true;
+    }
+    */
 
     /* nichtmehr benutzt
     public Tile GetTileAtPosition(Vector2Int pos)

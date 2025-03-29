@@ -107,7 +107,7 @@ public class Piece : NetworkBehaviour
 
             if (board.AreTilesValidForPlacement(targetTilesGridPositions, playerStatus))
             {
-                PlacePieceRpc(targetTilesGridPositions);
+                PlacePieceServerRpc(targetTilesGridPositions);
                 DeactivateTileMarkers();
                 return;
             }
@@ -162,23 +162,25 @@ public class Piece : NetworkBehaviour
     */
 
 
-    [Rpc(SendTo.Server)]
-    public void PlacePieceRpc(Vector2IntList targetTilePositions)  //Wird im Multiplayer später zu CmdRequestPlacePiece(...)
+    [ServerRpc]
+    public void PlacePieceServerRpc(Vector2IntList targetTilePositions)  //Wird im Multiplayer später zu CmdRequestPlacePiece(...)
     {
-        /*
-        if (targetTilePositions == null || targetTilePositions.Count < shape.Count)
-        {
-            return false;
-        } 
-        */
+        // check if request is valid
+        if (!board.AreTilesValidForPlacement(targetTilePositions, playerStatus)) {
+            Debug.Log("Invalid placement request for player: " + playerStatus);
+            DragResetPiecePosition();
+            return;
+        }
+
 
         transform.position = new Vector3(targetTilePositions.Values[0].x, targetTilePositions.Values[0].y, -2);
-        board.SetTilesOccupied(targetTilePositions, playerStatus);
-        GameManager.Instance.GetPlayerByPlayerStatus(playerStatus).firstPiecePlaced = true;
-        isPlaced.Value = true;
+        GameManager.Instance.SetTilesOccupied(targetTilePositions, playerStatus);
+        
+        // set firstPiecePlaced for player
+        GameManager.Instance.SetFirstPiecePlacedForPlayerStatus(playerStatus, true);
 
+        isPlaced.Value = true;
         GameManager.Instance.EndTurn(this);
-        //return true;
     }
 
     // Die Vector2IntList kann außerhalb des Grids liegen
