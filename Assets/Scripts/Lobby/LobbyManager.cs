@@ -18,7 +18,6 @@ public class LobbyManager : MonoBehaviour {
 
     public const string KEY_PLAYER_NAME = "PlayerName";
     public const string KEY_PLAYER_STATUS = "PlayerStatus";
-    public const string KEY_PLAYER_NETWORK_ID = "PlayerNetworkId";
     public const string KEY_GAME_MODE = "GameMode";
     public const string KEY_START_GAME = "StartGame";
     public const string KEY_RELAY_JOIN_CODE = "RelayJoinCode";
@@ -436,6 +435,7 @@ public class LobbyManager : MonoBehaviour {
         }
     }
 
+    /*
     public async void UpdatePlayerNetworkId() {
         try {
             var currentPlayer = Instance.GetCurrentPlayer();
@@ -452,7 +452,8 @@ public class LobbyManager : MonoBehaviour {
             throw;
         }
     }
-
+    */
+    /*
     public PlayerStatus GetPlayerStatusByNetworkId(string networkId) {
         if (networkId != "0") {
             Debug.Log("GetPlayerStatusByNetworkId not 0: " + networkId);
@@ -469,6 +470,7 @@ public class LobbyManager : MonoBehaviour {
         }
         return PlayerStatus.None;
     }
+    */
 
     public PlayerStatus GetCurrentPlayerStatus() {
         GetCurrentPlayer().Data.TryGetValue(KEY_PLAYER_STATUS, out var playerStatusData);

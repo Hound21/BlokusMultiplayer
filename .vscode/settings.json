@@ -51,5 +51,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "BlokusScratch.sln"
+    "dotnet.defaultSolution": "BlokusMultiplayer.sln"
 }

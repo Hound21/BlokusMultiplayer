@@ -10,12 +10,14 @@ public class LocalPlayer
     public bool isFinished { get; set; } = false;
     public bool firstPiecePlaced;
     public bool pressedPlayerFinishButton;
+    public string clientId;
 
 
-    public LocalPlayer(PlayerStatus playerStatus, Color color)
+    public LocalPlayer(PlayerStatus playerStatus, Color color, string clientId)
     {
         this.playerStatus = playerStatus;
         this.color = color;
+        this.clientId = clientId;
         this.firstPiecePlaced = false;
         this.pressedPlayerFinishButton = false;
         this.availablePieces = new List<Piece>();

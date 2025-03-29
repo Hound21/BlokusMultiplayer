@@ -235,6 +235,7 @@ public class Board : NetworkBehaviour
 
     private PlayerStatus GetGridPositionOccupant(Vector2Int pos) //OVERLOADED
     {
+        Debug.Log("Debug");
         return (PlayerStatus)GameManager.Instance.boardOccupied[pos.x + pos.y * boardXSize];
     }
 

@@ -5,26 +5,25 @@ using Unity.Netcode;
 
 public class Piece : NetworkBehaviour
 {
-    public PlayerStatus playerStatus;
-    public List<Vector2Int> shape = new List<Vector2Int>();
+    [SerializeField] public PlayerStatus playerStatus;
+    [SerializeField] public List<Vector2Int> shape = new List<Vector2Int>();
+    [SerializeField] public int points;
+    [SerializeField] public GameObject tileMarkerPrefab;
+
 
     private NetworkVariable<bool> isPlaced = new NetworkVariable<bool>(false);
-    public int points;
-    public bool _isDragging;
     private Board board;
-
+    public bool _isDragging;
     private Vector3 _startDragPosition;
     private Quaternion _startDragRotation;
     private List<Vector2Int> _startDragShape;
     private Vector3 _offset;
-
-    public GameObject tileMarkerPrefab;
     private List<GameObject> tileMarkers = new List<GameObject>();
 
     void Start()
     {
         _isDragging = false;
-        SetColor(GameManager.Instance.GetPlayerByPlayerStatus(playerStatus).color);
+        SetColor(GameManager.Instance.GetColorForPlayerStatus(playerStatus));
         board = GameManager.Instance.board;
         InstantiateTileMarkers();
     }

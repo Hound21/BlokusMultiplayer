@@ -313,6 +313,10 @@ PrefabInstance:
       value: 3
       objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
       propertyPath: playerStatus
       value: 3
       objectReference: {fileID: 0}
@@ -373,6 +377,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1005201039}
     m_Modifications:
+    - target: {fileID: -2465347448185612643, guid: caa11c3167dda574c9572af7b339de90, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: caa11c3167dda574c9572af7b339de90, type: 3}
+      propertyPath: playerStatus
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: caa11c3167dda574c9572af7b339de90, type: 3}
       propertyPath: shape.Array.size
       value: 5
@@ -793,6 +805,10 @@ PrefabInstance:
       value: 3
       objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
       propertyPath: playerStatus
       value: 3
       objectReference: {fileID: 0}
@@ -862,6 +878,10 @@ PrefabInstance:
     m_TransformParent: {fileID: 462950765}
     m_Modifications:
     - target: {fileID: -2465347448185612643, guid: caa11c3167dda574c9572af7b339de90, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: caa11c3167dda574c9572af7b339de90, type: 3}
       propertyPath: playerStatus
       value: 3
       objectReference: {fileID: 0}
@@ -930,6 +950,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1005201039}
     m_Modifications:
+    - target: {fileID: -2465347448185612643, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
+      propertyPath: playerStatus
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 419748373635889452, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
       propertyPath: m_Name
       value: MidPiece
@@ -1027,6 +1055,10 @@ PrefabInstance:
     - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
       propertyPath: playerID
       value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
+      propertyPath: m_Enabled
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
       propertyPath: playerStatus
@@ -1138,6 +1170,10 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
       propertyPath: playerStatus
       value: 1
       objectReference: {fileID: 0}
@@ -1216,6 +1252,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
       propertyPath: playerID
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
+      propertyPath: m_Enabled
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
@@ -1323,6 +1363,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 715053111}
     m_Modifications:
+    - target: {fileID: -2465347448185612643, guid: caa11c3167dda574c9572af7b339de90, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: caa11c3167dda574c9572af7b339de90, type: 3}
       propertyPath: playerStatus
       value: 2
@@ -1538,6 +1582,14 @@ PrefabInstance:
       propertyPath: playerID
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
+      propertyPath: playerStatus
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 419748373635889452, guid: da4e9feb22257a148a5d8306c346d6ee, type: 3}
       propertyPath: m_Name
       value: SinglePiece (1)
@@ -1627,6 +1679,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 126b24a8e3cd3184696f476dabff56df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  debugMode: 1
+  startAsHost: 1
   board: {fileID: 677216987}
   playerFinishedButton: {fileID: 1793501501}
   currentPlayerStatus:
@@ -1675,6 +1729,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1386639750}
     m_Modifications:
+    - target: {fileID: -2465347448185612643, guid: caa11c3167dda574c9572af7b339de90, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: caa11c3167dda574c9572af7b339de90, type: 3}
       propertyPath: playerStatus
       value: 1
@@ -1878,6 +1936,10 @@ PrefabInstance:
     - target: {fileID: -2465347448185612643, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
       propertyPath: playerID
       value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: -2465347448185612643, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
+      propertyPath: m_Enabled
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -2465347448185612643, guid: 2976557bb16ddd143844ebf9a0b5bb66, type: 3}
       propertyPath: playerStatus

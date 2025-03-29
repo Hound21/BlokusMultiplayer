@@ -10,6 +10,9 @@ using Unity.Services.Lobbies.Models;
 
 public class GameManager : NetworkBehaviour
 {
+    [SerializeField] private bool debugMode = false; // Set this in the Inspector
+    [SerializeField] private bool startAsHost = true; // True = Host, False = Client
+
     public static GameManager Instance { get; private set; }
     public Board board;
 
@@ -44,21 +47,9 @@ public class GameManager : NetworkBehaviour
         {
            InitializeBoardOccupied();
         }
-
-        /*
-        players[PlayerStatus.PlayerRed] = new LocalPlayer(PlayerStatus.PlayerRed, Color.red);
-        players[PlayerStatus.PlayerGreen] = new LocalPlayer(PlayerStatus.PlayerGreen, Color.green);
-        players[PlayerStatus.PlayerBlue] = new LocalPlayer(PlayerStatus.PlayerBlue, Color.blue);
-        players[PlayerStatus.PlayerYellow] = new LocalPlayer(PlayerStatus.PlayerYellow, Color.yellow);
-        
-
-        // add pieces to players
-        foreach (Piece piece in FindObjectsOfType<Piece>())
-        {
-            players[piece.playerStatus].AddPiece(piece);
-        }            
+     
         //currentPlayerStatus = playerOrder[0];
-        */
+
 
         if (playerFinishedButton != null)
         {
@@ -67,15 +58,36 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    private void Start() {
+        if (debugMode) {
+#if UNITY_EDITOR
+                Debug.Log("Starting in Debug Mode as Host...");
+                NetworkManager.Singleton.StartHost();
+#else                
+                Debug.Log("Starting in Debug Mode as Client...");
+                NetworkManager.Singleton.StartClient();
+#endif
+        }
+    }
+
     public override void OnNetworkSpawn()
     {
-        Debug.Log("OnNetworkSpawn: " + NetworkManager.Singleton.LocalClientId);
+        if (!debugMode) {
+            localPlayerStatus = LobbyManager.Instance.GetCurrentPlayerStatus();
+            Debug.Log("Set local player Status: " + localPlayerStatus);
+        }
+        else {
+            if (IsHost) {
+                localPlayerStatus = PlayerStatus.PlayerRed;
+            } else if (IsClient) {
+                localPlayerStatus = PlayerStatus.PlayerGreen;
+            } else {
+                localPlayerStatus = PlayerStatus.None;
+            }
+        }
 
-        LobbyManager.Instance.UpdatePlayerNetworkId();
-        localPlayerStatus = LobbyManager.Instance.GetCurrentPlayerStatus();
-        Debug.Log("Local Player Status: " + localPlayerStatus + "mit NetworkID-PlayerStatus: " + LobbyManager.Instance.GetPlayerStatusByNetworkId(NetworkManager.Singleton.LocalClientId.ToString()));
+        UpdateNetworkIdOnServerRpc(NetworkManager.Singleton.LocalClientId.ToString(), localPlayerStatus);
 
-        // server muss wisser wer connected ist
         if (IsServer) {
             NetworkManager.Singleton.OnClientConnectedCallback += NetworkManager_OnClientConnectedCallback;
         }
@@ -90,18 +102,12 @@ public class GameManager : NetworkBehaviour
     private void NetworkManager_OnClientConnectedCallback(ulong clientId)
     {
         Debug.Log("OnClientConnectedCallback: clientId =" + clientId);
-
-        PlayerStatus clientPlayerStatus = LobbyManager.Instance.GetPlayerStatusByNetworkId(clientId.ToString());
-        if (clientPlayerStatus == PlayerStatus.None) {
-            Debug.LogError("Client has no player status");
-            return;
+        
+        // print every player from players
+        foreach (var player in players)
+        {
+            Debug.Log("Player: " + player.Key + " with clientId: " + player.Value.clientId);
         }
-        if (players.ContainsKey(clientPlayerStatus)) {
-            Debug.LogError("Player status already exists");
-            return;
-        }
-        players[clientPlayerStatus] = new LocalPlayer(clientPlayerStatus, GetColorForPlayerStatus(clientPlayerStatus));
-        Debug.Log("Player " + clientPlayerStatus + " added");
 
 
         // if all players are connected, start the game
@@ -113,10 +119,31 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    [Rpc(SendTo.Server)]
+    public void UpdateNetworkIdOnServerRpc(string networkId, PlayerStatus playerStatus)
+    {
+        if (IsServer)
+        {
+            Debug.Log($"Updating NetworkId on Server: {networkId} for PlayerStatus: {playerStatus}");
+            if (!players.ContainsKey(playerStatus))
+            {
+                players[playerStatus] = new LocalPlayer(playerStatus, GetColorForPlayerStatus(playerStatus), networkId);
+            }
+        }
+    }
+
     // bisher nicht benutzt
     [Rpc(SendTo.ClientsAndHost)]
     private void TriggerOnGameStartedRpc() {
         OnGameStarted?.Invoke(this, EventArgs.Empty);
+
+        // add pieces to players
+        if (IsServer) {
+            foreach (Piece piece in FindObjectsOfType<Piece>())
+            {
+                players[piece.playerStatus].AddPiece(piece);
+            }   
+        }
     }
 
     // wird nur vom Server aufgerufen
