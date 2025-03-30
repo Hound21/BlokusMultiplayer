@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
+using UnityEditor.PackageManager;
 
 public class Piece : NetworkBehaviour
 {
@@ -84,6 +85,12 @@ public class Piece : NetworkBehaviour
 
     private void OnMouseDown()
     {
+        if (playerStatus == PlayerStatus.PlayerBlue)
+        {
+            Debug.Log("LocalPlayerStatus: " + GameManager.Instance.GetLocalPlayerStatus() + ", CurrentPlayerStatus: " + GameManager.Instance.GetCurrentPlayerStatus());
+        }
+
+
         PlayerStatus currentPlayerStatus = GameManager.Instance.GetCurrentPlayerStatus();
         if (GameManager.Instance.GetLocalPlayerStatus() == currentPlayerStatus && currentPlayerStatus == playerStatus && !isPlaced.Value)
         {
@@ -129,6 +136,15 @@ public class Piece : NetworkBehaviour
         _isDragging = false;
     }
 
+    [ClientRpc]
+    private void ResetPiecePositionClientRpc(ulong clientId, ClientRpcParams rpcParams = default)
+    {
+        if (NetworkManager.Singleton.LocalClientId != clientId) return;
+
+        Debug.Log("ResetPiecePositionClientRpc called for clientId: " + clientId);
+        DragResetPiecePosition();
+    }
+
     private void RotatePiece()
     {
         transform.RotateAround(transform.position, Vector3.forward, 90);
@@ -162,13 +178,15 @@ public class Piece : NetworkBehaviour
     */
 
 
-    [ServerRpc]
-    public void PlacePieceServerRpc(Vector2IntList targetTilePositions)  //Wird im Multiplayer später zu CmdRequestPlacePiece(...)
+    [ServerRpc(RequireOwnership = false)]
+    public void PlacePieceServerRpc(Vector2IntList targetTilePositions, ServerRpcParams rpcParams = default)  //Wird im Multiplayer später zu CmdRequestPlacePiece(...)
     {
+        Debug.Log("PlacePieceServerRpc called for player: " + playerStatus);
+
         // check if request is valid
         if (!board.AreTilesValidForPlacement(targetTilePositions, playerStatus)) {
             Debug.Log("Invalid placement request for player: " + playerStatus);
-            DragResetPiecePosition();
+            ResetPiecePositionClientRpc(rpcParams.Receive.SenderClientId);
             return;
         }
 
@@ -181,6 +199,8 @@ public class Piece : NetworkBehaviour
 
         isPlaced.Value = true;
         GameManager.Instance.EndTurn(this);
+
+        Debug.Log("PlacePieceServerRpc completed successfully.");
     }
 
     // Die Vector2IntList kann außerhalb des Grids liegen

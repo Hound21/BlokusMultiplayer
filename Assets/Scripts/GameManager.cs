@@ -102,6 +102,7 @@ public class GameManager : NetworkBehaviour
         currentPlayerStatus.OnValueChanged += (PlayerStatus oldPlayerStatus, PlayerStatus newPlayerStatus) =>
         {
             OnCurrentPlayerStatusChanged?.Invoke(this, EventArgs.Empty);
+            Debug.Log("Current Player Status changed from " + oldPlayerStatus + " to " + newPlayerStatus);
         };
     }
 
@@ -125,7 +126,7 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    [ServerRpc]
+    [ServerRpc(RequireOwnership = false)]
     public void AddPlayerServerRpc(string networkId, PlayerStatus playerStatus)
     {
         if (!IsServer) return;
@@ -144,7 +145,7 @@ public class GameManager : NetworkBehaviour
     [ServerRpc]
     private void TriggerOnGameStartedServerRpc() {
         OnGameStarted?.Invoke(this, EventArgs.Empty);
-    }
+    }    
 
     // wird nur vom Server aufgerufen
     private void InitializeBoardOccupied()
@@ -173,6 +174,7 @@ public class GameManager : NetworkBehaviour
         if (!IsServer) return;
         boardOccupied[tilePos.x + tilePos.y * Board.boardXSize] = (int)playerStatus;
     }
+
 
     // wird nur vom Server aufgerufen
     public void EndTurn(Piece piece)
