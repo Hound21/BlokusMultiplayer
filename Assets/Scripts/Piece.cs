@@ -2,19 +2,18 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
-using UnityEditor.PackageManager;
 
 public class Piece : NetworkBehaviour
 {
-    [SerializeField] public PlayerStatus playerStatus;
+    [SerializeField] public GameObject tileMarkerPrefab;
     [SerializeField] public List<Vector2Int> shape = new List<Vector2Int>();
     [SerializeField] public int points;
-    [SerializeField] public GameObject tileMarkerPrefab;
 
-
+    public NetworkVariable<PlayerStatus> playerStatus = new NetworkVariable<PlayerStatus>(PlayerStatus.None);
     private NetworkVariable<bool> isPlaced = new NetworkVariable<bool>(false);
+    private NetworkVariable<Color> pieceColor = new NetworkVariable<Color>(Color.white);
     private Board board;
-    public bool _isDragging;
+    public bool _isDragging = false;
     private Vector3 _startDragPosition;
     private Quaternion _startDragRotation;
     private List<Vector2Int> _startDragShape;
@@ -23,10 +22,14 @@ public class Piece : NetworkBehaviour
 
     void Start()
     {
-        _isDragging = false;
-        SetColor(GameManager.Instance.GetColorForPlayerStatus(playerStatus));
         board = GameManager.Instance.board;
         InstantiateTileMarkers();
+
+        pieceColor.OnValueChanged += (oldColor, newColor) =>
+        {
+            SetColor(newColor);
+        };
+        SetColor(pieceColor.Value);
     }
 
     private void Update()
@@ -58,7 +61,7 @@ public class Piece : NetworkBehaviour
         if (closestTileGridPos != new Vector2Int(-1, -1))
         {
             Vector2IntList targetTilesGridPositions = GetTargetTilesGridPositionsForPiece(closestTileGridPos);
-            if (board.AreTilesValidForPlacement(targetTilesGridPositions, playerStatus))
+            if (board.AreTilesValidForPlacement(targetTilesGridPositions, playerStatus.Value))
             {
                 ActivateTileMarkers(targetTilesGridPositions);
             }
@@ -75,6 +78,7 @@ public class Piece : NetworkBehaviour
 
     private void BeginDragging()
     {
+        Debug.Log("BeginDragging called for player: " + playerStatus.Value);
         Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         _offset = transform.position - new Vector3(mousePos.x, mousePos.y, 0);
         _isDragging = true;
@@ -85,14 +89,14 @@ public class Piece : NetworkBehaviour
 
     private void OnMouseDown()
     {
-        if (playerStatus == PlayerStatus.PlayerBlue)
+        if (playerStatus.Value == PlayerStatus.PlayerGreen)
         {
-            Debug.Log("LocalPlayerStatus: " + GameManager.Instance.GetLocalPlayerStatus() + ", CurrentPlayerStatus: " + GameManager.Instance.GetCurrentPlayerStatus());
+            Debug.Log("LocalPlayerStatus: " + GameManager.Instance.GetLocalPlayerStatus() + ", CurrentPlayerStatus: " + GameManager.Instance.GetCurrentPlayerStatus() + "IsPlaced: " + isPlaced.Value);
         }
 
 
         PlayerStatus currentPlayerStatus = GameManager.Instance.GetCurrentPlayerStatus();
-        if (GameManager.Instance.GetLocalPlayerStatus() == currentPlayerStatus && currentPlayerStatus == playerStatus && !isPlaced.Value)
+        if (GameManager.Instance.GetLocalPlayerStatus() == currentPlayerStatus && currentPlayerStatus == playerStatus.Value && !isPlaced.Value)
         {
             BeginDragging();
         }
@@ -112,7 +116,7 @@ public class Piece : NetworkBehaviour
         {
             Vector2IntList targetTilesGridPositions = GetTargetTilesGridPositionsForPiece(nearestTileGridPosition);
 
-            if (board.AreTilesValidForPlacement(targetTilesGridPositions, playerStatus))
+            if (board.AreTilesValidForPlacement(targetTilesGridPositions, playerStatus.Value))
             {
                 PlacePieceServerRpc(targetTilesGridPositions);
                 DeactivateTileMarkers();
@@ -124,6 +128,19 @@ public class Piece : NetworkBehaviour
     }
 
     private void MovePiece(Vector3 newPosition)
+    {
+        MovePieceServerRpc(newPosition);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void MovePieceServerRpc(Vector3 newPosition, ServerRpcParams rpcParams = default)
+    {
+        transform.position = newPosition;
+        MovePieceClientRpc(newPosition);
+    }
+
+    [ClientRpc]
+    public void MovePieceClientRpc(Vector3 newPosition, ClientRpcParams rpcParams = default)
     {
         transform.position = newPosition;
     }
@@ -181,26 +198,35 @@ public class Piece : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     public void PlacePieceServerRpc(Vector2IntList targetTilePositions, ServerRpcParams rpcParams = default)  //Wird im Multiplayer später zu CmdRequestPlacePiece(...)
     {
-        Debug.Log("PlacePieceServerRpc called for player: " + playerStatus);
+        Debug.Log("PlacePieceServerRpc called for player: " + playerStatus.Value);
 
         // check if request is valid
-        if (!board.AreTilesValidForPlacement(targetTilePositions, playerStatus)) {
-            Debug.Log("Invalid placement request for player: " + playerStatus);
+        if (!board.AreTilesValidForPlacement(targetTilePositions, playerStatus.Value)) 
+        {
+            Debug.Log("Invalid placement request for player: " + playerStatus.Value);
             ResetPiecePositionClientRpc(rpcParams.Receive.SenderClientId);
             return;
         }
-
-
-        transform.position = new Vector3(targetTilePositions.Values[0].x, targetTilePositions.Values[0].y, -2);
-        GameManager.Instance.SetTilesOccupied(targetTilePositions, playerStatus);
         
-        // set firstPiecePlaced for player
-        GameManager.Instance.SetFirstPiecePlacedForPlayerStatus(playerStatus, true);
+        GameManager.Instance.SetTilesOccupied(targetTilePositions, playerStatus.Value);
+        GameManager.Instance.SetFirstPiecePlacedForPlayerStatus(playerStatus.Value, true);
 
+        Vector3 targetPosGrid = new Vector3(targetTilePositions.Values[0].x, targetTilePositions.Values[0].y, -2);
+        SnapPieceToGridClientRpc(targetPosGrid, rpcParams.Receive.SenderClientId);
         isPlaced.Value = true;
+
         GameManager.Instance.EndTurn(this);
 
         Debug.Log("PlacePieceServerRpc completed successfully.");
+    }
+
+    [ClientRpc]
+    public void SnapPieceToGridClientRpc(Vector3 targetPosGrid, ulong clientId, ClientRpcParams rpcParams = default)
+    {
+        if (NetworkManager.Singleton.LocalClientId != clientId) return;
+
+        Debug.Log("SnapPieceToGridClientRpc called for clientId: " + clientId);
+        transform.position = targetPosGrid;
     }
 
     // Die Vector2IntList kann außerhalb des Grids liegen
@@ -251,5 +277,11 @@ public class Piece : NetworkBehaviour
         {
             spriteRend.color = newColor; // Farbe direkt setzen
         }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void SetPieceColorServerRpc(Color color, ServerRpcParams rpcParams = default)
+    {
+        pieceColor.Value = color;
     }
 }

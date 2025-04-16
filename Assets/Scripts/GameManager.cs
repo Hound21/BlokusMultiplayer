@@ -7,12 +7,12 @@ using Unity.Netcode;
 using Unity.Services.Lobbies;
 using Unity.Services.Lobbies.Models;
 using UnityEngine.UI;
-using System.Drawing;
 using Unity.Collections;
 
 public class GameManager : NetworkBehaviour
 {
     [SerializeField] private bool debugMode = false; // Set this in the Inspector
+    [SerializeField] private List<GameObject> piecePrefabs;
 
     public const int COUNT_PIECES_PER_PLAYER = 3;
 
@@ -58,13 +58,14 @@ public class GameManager : NetworkBehaviour
 
     private void Start() {
         if (debugMode) {
-#if UNITY_EDITOR
+            NetworkManager.Singleton.StartClient();
+/*#if UNITY_EDITOR
                 Debug.Log("Starting in Debug Mode as Host...");
                 NetworkManager.Singleton.StartHost();
 #else                
                 Debug.Log("Starting in Debug Mode as Client...");
                 NetworkManager.Singleton.StartClient();
-#endif
+#endif*/
         }
     }
 
@@ -86,6 +87,7 @@ public class GameManager : NetworkBehaviour
             }
         }
 
+
         // Initialize boardOccupied
         if (IsServer)
         {
@@ -93,6 +95,7 @@ public class GameManager : NetworkBehaviour
         }
 
         AddPlayerServerRpc(NetworkManager.Singleton.LocalClientId.ToString(), localPlayerStatus);
+
 
         if (IsServer) {
             NetworkManager.Singleton.OnClientConnectedCallback += NetworkManager_OnClientConnectedCallback;
@@ -115,6 +118,18 @@ public class GameManager : NetworkBehaviour
         {
             Debug.Log("Player: " + player.playerStatus + " clientId: " + player.clientId);
         }
+
+        // Find PlayerStatus for clientId and spawn pieces for the player
+        PlayerStatus playerStatus = PlayerStatus.None;
+        foreach (var player in playerDataList)
+        {
+            if (player.clientId.ToString() == clientId.ToString())
+            {
+                playerStatus = player.playerStatus;
+                break;
+            }
+        }
+        SpawnPlayerPieces(playerStatus, clientId);
 
 
         // if all players are connected, start the game
@@ -157,6 +172,53 @@ public class GameManager : NetworkBehaviour
                     boardOccupied.Add((int)PlayerStatus.None);
                 }
             }
+    }
+
+    // nur server
+    private void SpawnPlayerPieces(PlayerStatus playerStatus, ulong clientId)
+    {
+        Vector3 startPosition = GetStartingPositionForPlayer(playerStatus);
+
+        foreach (var prefab in piecePrefabs)
+        {
+            // Server spawns piece
+            GameObject pieceObject = Instantiate(prefab, startPosition, Quaternion.identity);
+            Piece piece = pieceObject.GetComponent<Piece>();
+
+            // Spawns NetworkObject
+            NetworkObject networkObject = pieceObject.GetComponent<NetworkObject>();
+            networkObject.Spawn();
+
+            // set piece playerStatus
+            piece.playerStatus.Value = playerStatus;
+
+            // hand over ownership
+            networkObject.ChangeOwnership(clientId);
+
+            // set piece color
+            Color pieceColor = GetColorForPlayerStatus(playerStatus);
+            piece.SetPieceColorServerRpc(pieceColor);
+
+            // Update Startposition für das nächste Piece
+            startPosition += new Vector3(3, 0, 0);
+        }
+    }
+
+    private Vector3 GetStartingPositionForPlayer(PlayerStatus playerStatus)
+    {
+        switch (playerStatus)
+        {
+            case PlayerStatus.PlayerRed:
+                return new Vector3(25, 3, 0);
+            case PlayerStatus.PlayerGreen:
+                return new Vector3(-14, 3, 0);
+            case PlayerStatus.PlayerBlue:
+                return new Vector3(-14, 17, 0);
+            case PlayerStatus.PlayerYellow:
+                return new Vector3(25, 17, 0);
+            default:
+                return Vector3.zero;
+        }
     }
 
     // wird nur vom Server aufgerufen
@@ -432,20 +494,20 @@ public class GameManager : NetworkBehaviour
     }
 
 
-    public UnityEngine.Color GetColorForPlayerStatus(PlayerStatus playerStatus)
+    public Color GetColorForPlayerStatus(PlayerStatus playerStatus)
     {
         switch (playerStatus)
         {
             case PlayerStatus.PlayerRed:
-                return UnityEngine.Color.red;
+                return Color.red;
             case PlayerStatus.PlayerGreen:
-                return UnityEngine.Color.green;
+                return Color.green;
             case PlayerStatus.PlayerBlue:
-                return UnityEngine.Color.blue;
+                return Color.blue;
             case PlayerStatus.PlayerYellow:
-                return UnityEngine.Color.yellow;
+                return Color.yellow;
             default:
-                return UnityEngine.Color.white;
+                return Color.white;
         }
     }
 
